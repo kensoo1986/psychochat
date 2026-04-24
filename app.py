@@ -31,20 +31,31 @@ USER_DATABASE = {
 }
 
 # 数据保存函数
-def save_to_cloud(student_id, user_msg, ai_msg, risk_score="N/A", is_summary=False):
+# --- 升级后的数据保存函数 ---
+def save_to_cloud(student_id, user_msg, ai_msg, is_summary=False):
     try:
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # 1. 数字化预警逻辑：检测关键词
+        danger_list = ["想死", "自杀", "跳楼", "不活了", "离开世界", "吃药"]
+        risk_score = 0  # 默认为安全
+        
+        # 如果学生说的话里包含危险词，直接打 10 分
+        if any(word in user_msg for word in danger_list):
+            risk_score = 10
+        
+        # 2. 构建新行
         new_row = pd.DataFrame([{
             "datetime": now,
             "student_id": student_id,
             "user_input": user_msg if not is_summary else "--- 系统总结 ---",
             "ai_response": ai_msg,
-            "risk_score": risk_score
+            "risk_score": risk_score # 这里现在会显示 0 或 10
         }])
-        # 读取并追加
+        
+        # 3. 写入云端
         existing_data = conn.read(ttl=0)
         updated_df = pd.concat([existing_data, new_row], ignore_index=True)
-        # 写回云端
         conn.update(data=updated_df)
     except Exception as e:
         st.sidebar.error(f"云端同步失败: {e}")
