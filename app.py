@@ -14,7 +14,7 @@ if sys.stdout.encoding != 'utf-8':
 # --- 2. 配置 ---
 st.set_page_config(page_title="心情树洞", page_icon="🌱", layout="centered")
 
-# 初始化连接
+# 初始化 Google Sheets 连接
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # 配置 DeepSeek
@@ -41,8 +41,10 @@ def save_to_cloud(student_id, user_msg, ai_msg, risk_score="N/A", is_summary=Fal
             "ai_response": ai_msg,
             "risk_score": risk_score
         }])
+        # 读取并追加
         existing_data = conn.read(ttl=0)
         updated_df = pd.concat([existing_data, new_row], ignore_index=True)
+        # 写回云端
         conn.update(data=updated_df)
     except Exception as e:
         st.sidebar.error(f"云端同步失败: {e}")
@@ -66,6 +68,7 @@ if "student_id" not in st.session_state:
                     {"role": "system", "content": "你是一位专业的学校心理辅导员。任务：通过对话温和评估 PHQ-9。完成后结尾加 [COMPLETE]。"},
                     {"role": "assistant", "content": f"同学你好（学号：{input_id}）！我是你的 AI 心理伙伴。🌱\n你最近在学校过得怎么样？"}
                 ]
+                st.success("验证成功，正在进入...")
                 st.rerun()
             else:
                 st.error("❌ 学号或密码错误")
@@ -79,6 +82,7 @@ with st.sidebar:
     st.write(f"💬 已交流轮数: **{current_count}**")
     
     if not is_unlocked:
+        st.info("💡 真实分享感受，可以帮助 AI 更快完成评估。")
         st.progress(min(current_count / 20, 0.9))
     else:
         st.success("✨ 评估已完成！")
@@ -86,32 +90,57 @@ with st.sidebar:
         st.progress(1.0)
     
     st.divider()
+    
+    # 退出逻辑
     can_exit_now = is_unlocked or current_count >= 20
     
     if st.button("✅ 提交评估并退出", disabled=not can_exit_now):
-        st.info("正在生成报告...")
-        eval_messages = st.session_state.messages + [{"role": "user", "content": "请根据以上对话给出 PHQ-9 总结。格式：{'score': 分数, 'reason': '简析'}"}]
-        eval_res = client.chat.completions.create(model="deepseek-chat", messages=eval_messages)
-        save_to_cloud(st.session_state.student_id, "FINAL_SUMMARY", eval_res.choices[0].message.content, is_summary=True)
-        for key in list(st.session_state.keys()): del st.session_state[key]
+        st.info("正在生成 PHQ-9 总结并同步云端...")
+        eval_messages = st.session_state.messages + [
+            {"role": "user", "content": "请根据以上对话给出 PHQ-9 总结。格式：{'score': 分数, 'level': '等级', 'reason': '简析'}"}
+        ]
+        try:
+            eval_res = client.chat.completions.create(model="deepseek-chat", messages=eval_messages)
+            summary = eval_res.choices[0].message.content
+            save_to_cloud(st.session_state.student_id, "FINAL_SUMMARY", summary, is_summary=True)
+            st.success("保存成功！")
+        except Exception as e:
+            st.error(f"保存失败: {e}")
+
+        # 清空状态
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
         st.rerun()
 
-# --- 5. 对话界面 ---
+# --- 5. 聊天界面 ---
 for msg in st.session_state.messages:
     if msg["role"] != "system":
-        with st.chat_message(msg["role"]): st.write(msg["content"])
+        with st.chat_message(msg["role"]):
+            st.write(msg["content"])
 
-if prompt := st.chat_input("在这里输入..."):
+if prompt := st.chat_input("在这里说说你的心事..."):
     st.session_state.chat_count += 1
     st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"): st.write(prompt)
+    with st.chat_message("user"):
+        st.write(prompt)
 
     with st.chat_message("assistant"):
-        completion = client.chat.completions.create(model="deepseek-chat", messages=st.session_state.messages)
-        res = completion.choices[0].message.content
-        if "[COMPLETE]" in res:
-            st.session_state.can_exit = True
-            res = res.replace("[COMPLETE]", "")
-        st.write(res)
-        st.session_state.messages.append({"role": "assistant", "content": res})
-        save_to_cloud(st.session_state.student_id, prompt, res)
+        try:
+            completion = client.chat.completions.create(
+                model="deepseek-chat", 
+                messages=st.session_state.messages
+            )
+            res = completion.choices[0].message.content
+            
+            if "[COMPLETE]" in res:
+                st.session_state.can_exit = True
+                res = res.replace("[COMPLETE]", "")
+            
+            st.write(res)
+            st.session_state.messages.append({"role": "assistant", "content": res})
+            
+            # 实时同步每一轮对话到 Google Sheets
+            save_to_cloud(st.session_state.student_id, prompt, res)
+            
+        except Exception as e:
+            st.error(f"连接出错: {e}")
