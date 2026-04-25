@@ -45,39 +45,50 @@ def save_to_db(student_id, user_msg, ai_msg, is_summary=False):
     except Exception as e:
         st.sidebar.error(f"云端同步失败: {e}")
 
-# --- 4. 登录界面 (联网校验 3000 人名单) ---
-st.title("🌱 中学生心情树洞")
-
+# --- 4. 登录界面 (增强兼容版) ---
 if "student_id" not in st.session_state:
-    st.info("欢迎来到滨华中学心情树洞。请输入学号和密码以开始你的心理健康评估。")
+    st.title("🌱 中学生心情树洞")
+    st.info("欢迎来到滨华中学心情树洞。请输入学号和密码以开始评估。")
+    
     with st.form("login_box"):
+        # 使用 .strip() 确保用户输入的学号前后没有意外空格
         input_id = st.text_input("学号：", placeholder="例如：2026001").strip()
-        input_pw = st.text_input("密码：", type="password")
+        input_pw = st.text_input("密码：", type="password").strip()
         submit_button = st.form_submit_button("登录进入系统")
         
         if submit_button:
-            # 💡 核心：去数据库的 students 表查询该学生
-            try:
-                res = supabase.table("students").select("*").eq("student_id", input_id).execute()
-                
-                if res.data and len(res.data) > 0 and res.data[0]["password"] == input_pw:
-                    # 登录成功
-                    st.session_state.student_id = input_id
-                    st.session_state.chat_count = 0
-                    st.session_state.can_exit = False
-                    st.session_state.messages = [
-                        {"role": "system", "content": """你是一位专业的学校心理辅导员。
-                        你的任务：通过对话温和地评估 PHQ-9 的 9 个维度。
-                        重要规则：如果学生回答敷衍，请换种方式引导。
-                        当你认为已经收集到了足够的心理状态信息，请在回复的结尾加上特殊标记 [COMPLETE]。"""},
-                        {"role": "assistant", "content": f"同学你好（学号：{input_id}）！我是你的 AI 心理伙伴。🌱\n今天的对话是为了了解你最近的心情和生活状态。\n\n当左边的退出按钮解锁时，说明我们的评估已完成。通常需要认真交流 10 到 15 轮。\n我们先开始吧：你最近在学校过得怎么样？"}
-                    ]
-                    st.success("验证成功，正在进入...")
-                    st.rerun()
-                else:
-                    st.error("❌ 学号或密码错误")
-            except Exception as e:
-                st.error(f"登录服务异常: {e}")
+            if not input_id or not input_pw:
+                st.warning("请完整填写学号和密码")
+            else:
+                with st.spinner("正在核对名单..."):
+                    # 💡 尝试查询数据库
+                    try:
+                        # 核心修复：无论数据库里存的是数字还是文字，都尝试匹配
+                        res = supabase.table("students").select("*").eq("student_id", input_id).execute()
+                        
+                        if res.data and len(res.data) > 0:
+                            # 💡 再次增强兼容性：将库里的密码和输入的密码都转为字符串进行对比
+                            db_pw = str(res.data[0]["password"]).strip()
+                            
+                            if db_pw == input_pw:
+                                # 验证成功
+                                st.session_state.student_id = input_id
+                                st.session_state.chat_count = 0
+                                st.session_state.can_exit = False
+                                st.session_state.messages = [
+                                    {"role": "system", "content": """你是一位专业的学校心理辅导员。
+                                    你的任务：通过对话温和地评估 PHQ-9 的 9 个维度。
+                                    重要规则：如果学生回答敷衍，请换种方式引导。完成后加 [COMPLETE]。"""},
+                                    {"role": "assistant", "content": f"同学你好（学号：{input_id}）！我是你的 AI 心理伙伴。🌱\n今天的对话是为了了解你最近的心情和生活状态。我们先开始吧：你最近在学校过得怎么样？"}
+                                ]
+                                st.success("验证成功，正在进入...")
+                                st.rerun()
+                            else:
+                                st.error("❌ 密码不匹配，请重新输入。")
+                        else:
+                            st.error("❌ 找不到该学号。请确保学号输入正确，或联系咨询处老师。")
+                    except Exception as e:
+                        st.error(f"数据库连接异常: {e}")
     st.stop()
 
 # --- 5. 侧边栏：状态显示与评估总结 ---
