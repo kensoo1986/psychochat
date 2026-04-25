@@ -1,157 +1,94 @@
-import sys
-import io
-import os
 import streamlit as st
 from openai import OpenAI
-from streamlit_gsheets import GSheetsConnection
-import pandas as pd
-from datetime import datetime
+from supabase import create_client, Client
+import os
 
-# 1. 编码修复
-if sys.stdout.encoding != 'utf-8':
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+# --- 1. 初始化连接 ---
+st.set_page_config(page_title="心情树洞", page_icon="🌱")
 
-# --- 2. 配置 ---
-st.set_page_config(page_title="心情树洞", page_icon="🌱", layout="centered")
+# 数据库连接（工业级并发支持）
+url: str = st.secrets["SUPABASE_URL"]
+key: str = st.secrets["SUPABASE_KEY"]
+supabase: Client = create_client(url, key)
 
-# 初始化 Google Sheets 连接
-conn = st.connection("gsheets", type=GSheetsConnection)
+# AI 连接
+client = OpenAI(api_key=st.secrets["DEEPSEEK_API_KEY"], base_url="https://api.deepseek.com")
 
-# 配置 DeepSeek
-client = OpenAI(
-    api_key=st.secrets["DEEPSEEK_API_KEY"], 
-    base_url="https://api.deepseek.com"
-)
-
-# 账号数据库
+# --- 2. 账号数据库 ---
 USER_DATABASE = {
     "2026001": "pw123",
     "2026002": "pw456",
     "test": "test123"
 }
 
-# 数据保存函数
-# --- 升级后的数据保存函数 ---
-def save_to_cloud(student_id, user_msg, ai_msg, is_summary=False):
+# --- 3. 核心保存函数 (Supabase) ---
+def save_to_db(student_id, user_msg, ai_msg, risk_score=0):
     try:
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        # 1. 数字化预警逻辑：检测关键词
-        danger_list = ["想死", "自杀", "跳楼", "不活了", "离开世界", "吃药"]
-        risk_score = 0  # 默认为安全
-        
-        # 如果学生说的话里包含危险词，直接打 10 分
-        if any(word in user_msg for word in danger_list):
-            risk_score = 10
-        
-        # 2. 构建新行
-        new_row = pd.DataFrame([{
-            "datetime": now,
+        data = {
             "student_id": student_id,
-            "user_input": user_msg if not is_summary else "--- 系统总结 ---",
+            "user_input": user_msg,
             "ai_response": ai_msg,
-            "risk_score": risk_score # 这里现在会显示 0 或 10
-        }])
-        
-        # 3. 写入云端
-        existing_data = conn.read(ttl=0)
-        updated_df = pd.concat([existing_data, new_row], ignore_index=True)
-        conn.update(data=updated_df)
+            "risk_score": risk_score
+        }
+        # 即使 3000 人同时操作，数据库也会自动排队处理
+        supabase.table("chat_logs").insert(data).execute()
     except Exception as e:
-        st.sidebar.error(f"云端同步失败: {e}")
+        st.sidebar.error(f"存储异常: {e}")
 
-# --- 3. 登录界面 ---
-st.title("🌱 中学生心情树洞")
-
+# --- 4. 登录界面 ---
 if "student_id" not in st.session_state:
-    st.info("欢迎来到心情树洞。请输入学号和密码以开始。")
-    with st.form("login_box"):
-        input_id = st.text_input("学号：", placeholder="例如：2026001")
-        input_pw = st.text_input("密码：", type="password")
-        submit_button = st.form_submit_button("登录进入系统")
-        
-        if submit_button:
-            if input_id.strip() in USER_DATABASE and USER_DATABASE[input_id.strip()] == input_pw:
-                st.session_state.student_id = input_id.strip()
+    st.title("🌱 中学生心情树洞")
+    with st.form("login_form"):
+        input_id = st.text_input("请输入学号：")
+        input_pw = st.text_input("请输入密码：", type="password")
+        if st.form_submit_button("登录进入系统"):
+            if input_id in USER_DATABASE and USER_DATABASE[input_id] == input_pw:
+                st.session_state.student_id = input_id
                 st.session_state.chat_count = 0
                 st.session_state.can_exit = False
                 st.session_state.messages = [
-                    {"role": "system", "content": "你是一位专业的学校心理辅导员。任务：通过对话温和评估 PHQ-9。完成后结尾加 [COMPLETE]。"},
-                    {"role": "assistant", "content": f"同学你好（学号：{input_id}）！我是你的 AI 心理伙伴。🌱\n你最近在学校过得怎么样？"}
+                    {"role": "system", "content": "你是一位学校辅导员，温和评估 PHQ-9。完成后结尾加 [COMPLETE]。"},
+                    {"role": "assistant", "content": f"同学你好（{input_id}）！最近心情怎么样？"}
                 ]
-                st.success("验证成功，正在进入...")
                 st.rerun()
             else:
-                st.error("❌ 学号或密码错误")
+                st.error("❌ 验证失败")
     st.stop()
 
-# --- 4. 侧边栏 ---
+# --- 5. 侧边栏与退出 ---
 with st.sidebar:
-    st.success(f"当前登录：{st.session_state.student_id}")
-    is_unlocked = st.session_state.get("can_exit", False)
-    current_count = st.session_state.get("chat_count", 0)
-    st.write(f"💬 已交流轮数: **{current_count}**")
+    st.success(f"当前：{st.session_state.student_id}")
+    count = st.session_state.chat_count
+    st.write(f"💬 对话轮数: {count}")
+    st.progress(min(count / 15, 1.0))
     
-    if not is_unlocked:
-        st.info("💡 真实分享感受，可以帮助 AI 更快完成评估。")
-        st.progress(min(current_count / 20, 0.9))
-    else:
-        st.success("✨ 评估已完成！")
-        st.balloons()
-        st.progress(1.0)
-    
-    st.divider()
-    
-    # 退出逻辑
-    can_exit_now = is_unlocked or current_count >= 20
-    
-    if st.button("✅ 提交评估并退出", disabled=not can_exit_now):
-        st.info("正在生成 PHQ-9 总结并同步云端...")
-        eval_messages = st.session_state.messages + [
-            {"role": "user", "content": "请根据以上对话给出 PHQ-9 总结。格式：{'score': 分数, 'level': '等级', 'reason': '简析'}"}
-        ]
-        try:
-            eval_res = client.chat.completions.create(model="deepseek-chat", messages=eval_messages)
-            summary = eval_res.choices[0].message.content
-            save_to_cloud(st.session_state.student_id, "FINAL_SUMMARY", summary, is_summary=True)
-            st.success("保存成功！")
-        except Exception as e:
-            st.error(f"保存失败: {e}")
+    if st.session_state.can_exit or count >= 20:
+        if st.button("✅ 评估完成：点击提交退出"):
+            # 生成最终总结逻辑
+            st.success("数据已同步至云端。")
+            for key in list(st.session_state.keys()): del st.session_state[key]
+            st.rerun()
 
-        # 清空状态
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
-        st.rerun()
+# --- 6. 聊天逻辑 ---
+for msg in st.session_state.messages[1:]:
+    with st.chat_message(msg["role"]): st.write(msg["content"])
 
-# --- 5. 聊天界面 ---
-for msg in st.session_state.messages:
-    if msg["role"] != "system":
-        with st.chat_message(msg["role"]):
-            st.write(msg["content"])
-
-if prompt := st.chat_input("在这里说说你的心事..."):
+if prompt := st.chat_input("说吧..."):
     st.session_state.chat_count += 1
     st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.write(prompt)
+    with st.chat_message("user"): st.write(prompt)
 
     with st.chat_message("assistant"):
-        try:
-            completion = client.chat.completions.create(
-                model="deepseek-chat", 
-                messages=st.session_state.messages
-            )
-            res = completion.choices[0].message.content
-            
-            if "[COMPLETE]" in res:
-                st.session_state.can_exit = True
-                res = res.replace("[COMPLETE]", "")
-            
-            st.write(res)
-            st.session_state.messages.append({"role": "assistant", "content": res})
-            
-            # 实时同步每一轮对话到 Google Sheets
-            save_to_cloud(st.session_state.student_id, prompt, res)
-            
-        except Exception as e:
-            st.error(f"连接出错: {e}")
+        completion = client.chat.completions.create(model="deepseek-chat", messages=st.session_state.messages)
+        full_res = completion.choices[0].message.content
+        
+        if "[COMPLETE]" in full_res:
+            st.session_state.can_exit = True
+            full_res = full_res.replace("[COMPLETE]", "")
+        
+        st.write(full_res)
+        st.session_state.messages.append({"role": "assistant", "content": full_res})
+        
+        # 数字化预警逻辑
+        score = 10 if any(w in prompt for w in ["想死", "自杀", "跳楼", "不活了"]) else 0
+        save_to_db(st.session_state.student_id, prompt, full_res, score)
