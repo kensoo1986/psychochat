@@ -137,3 +137,22 @@ if prompt := st.chat_input("在这里说说你的心事..."):
         st.write(prompt)
 
     with st.chat_message("assistant"):
+        try:
+            completion = client.chat.completions.create(
+                model="deepseek-chat", 
+                messages=st.session_state.messages
+            )
+            res = completion.choices[0].message.content
+            
+            if "[COMPLETE]" in res:
+                st.session_state.can_exit = True
+                res = res.replace("[COMPLETE]", "")
+            
+            st.write(res)
+            st.session_state.messages.append({"role": "assistant", "content": res})
+            
+            # 实时同步数据到 Supabase
+            save_to_db(st.session_state.student_id, prompt, res)
+            
+        except Exception as e:
+            st.error(f"连接出错: {e}")
