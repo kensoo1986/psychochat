@@ -25,7 +25,7 @@ if "student_id" not in st.session_state:
                 st.error("学号或密码错误")
     st.stop()
 
-# --- 3. 模式选择界面 ---
+# --- 3. 模式选择界面 (更新版：加入退出功能) ---
 if "current_mode" not in st.session_state:
     st.title(f"你好，{st.session_state.student_id}")
     st.subheader("请选择你今天想进行的活动：")
@@ -41,6 +41,16 @@ if "current_mode" not in st.session_state:
             st.rerun()
     
     st.info("💡 提示：'生命向导'侧重于了解你的兴趣与成长；'心情检测'侧重于近期的情绪评估。")
+
+    # --- 新增退出按钮 ---
+    st.divider() # 画一条分割线
+    col_l, col_m, col_r = st.columns([1, 2, 1]) # 居中排列
+    with col_m:
+        if st.button("🚪 退出账号 / 换人登录", use_container_width=True):
+            # 清除所有 session 数据，回到登录页
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            st.rerun()
     st.stop()
 
 # --- 4. 初始化对话 (修复变量未定义报错) ---
