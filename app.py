@@ -50,22 +50,38 @@ if "current_mode" not in st.session_state:
     st.stop()
 
 # --- 4. 初始化对话指令 (强化任务引导) ---
-if "messages" not in st.session_state:
-    if st.session_state.current_mode == "Navigator":
-        sys_prompt = """你是一位温柔的辅导老师‘心灵之友’。
-        你的终极任务是引导学生聊透以下五个维度：
-        1. 自我价值感 (自信来源)
-        2. 家庭资源 (家庭支持/压力)
-        3. 社交风格 (同伴关系)
-        4. 应对机制 (面对挫败的表现)
-        5. 职业志向 (梦想兴趣)
+if st.session_state.current_mode == "Navigator":
+        sys_prompt = """你是一位专业的心理辅导老师（心灵之友 AI）。
+        
+        你的任务是完成【五维心灵图鉴】的评估。在对话结束前，你必须确保调查完以下所有要点：
 
-        [规则]：
-        - 每次只深挖一个维度。只有当学生聊够了，再温柔转向下一个。
-        - 必须先接住学生的情绪（共情），再进行引导。
-        - 每条回复控制在 60 字内，像微信聊天一样。
-        - **重点**：每当你觉得已经‘基本了解’了其中一个维度，请在回复的最末尾加上该维度的隐藏标签（例如：#向度1#），不要告诉学生。"""
-        init_text = "你好呀！我是你的心灵之友。🌱 我们的话是保密的（安全风险除外）。今天想和我分享你的什么心情或故事吗？"
+        1. 【自我价值感】：
+           - 确认价值感来源（内在 vs 外在成绩）
+           - 确认自我效能感（面对挑战的信心）
+           - 探测是否有“我不够好”等负面核心信念
+        
+        2. 【家庭资源】：
+           - 确认与父母的情感联结深度
+           - 确认父母期待带来的压力值
+           - 确认家庭内部的冲突处理模式
+        
+        3. 【社交风格】：
+           - 确认班级归属感（是否有真实朋友）
+           - 观察是否存在社交掩饰（面具）
+        
+        4. 【情绪稳定度】：
+           - 观察近期情绪波动的频率
+           - 确认情绪失衡后的自我修复能力
+        
+        5. 【生涯志向】：
+           - 确认是否存在自发热爱的兴趣点
+           - 确认对未来选择的掌控感
+        
+        [访谈策略]：
+        - 禁止连续提问：每轮对话必须先针对学生上一句话进行“情感回应（共情）”，然后再抛出一个深挖的问题。
+        - 深度要求：每个向度至少需要 2-3 次追问，确认学生给出了“实质性内容”而非敷衍（如“还好”、“不知道”）。
+        - 标签机制：只有当你确信已经掌握了该向度的所有“数据采集点”，才在回复末尾加上 #向度X#。
+        """
     else:
         sys_prompt = "你是一位专业心理辅导员，评估 PHQ-9 指标。完成后加 [COMPLETE]。"
         init_text = "你好，最近两周，你觉得自己心情怎么样？"
@@ -75,29 +91,32 @@ if "messages" not in st.session_state:
         st.session_state.completed_dimensions = []
 
 # --- 5. 侧边栏 (进度条与引导语) ---
+# --- 侧边栏逻辑修改 ---
 with st.sidebar:
     st.title("💎 探索中心")
-    st.info("💡 请尽量与AI对话。当完成五大维度评估后，会出现“完成退出”按键，并生成完整报告。")
     
-    # 进度计算逻辑
-    dim_count = len(set(st.session_state.completed_dimensions)) # 使用 set 避免重复计数
-    progress = min(dim_count / 5.0, 1.0)
+    # 获取当前已点亮的向度数量
+    dim_count = len(set(st.session_state.completed_dimensions))
+    progress = dim_count / 5.0
     
-    st.markdown(f"**心灵图鉴完成度：{int(progress * 100)}%**")
-    st.progress(progress)
-    
-    # 向度点亮显示
-    dims_list = ["自我价值", "家庭资源", "社交风格", "应对机制", "职业志向"]
-    for i, name in enumerate(dims_list):
-        status = "🟢" if (i+1) in st.session_state.completed_dimensions else "⚪"
-        st.write(f"{status} {name}")
+    # 动态提示
+    if dim_count < 5:
+        st.warning(f"目前已完成 {dim_count}/5 个向度。")
+        st.info("AI 需要更深入地了解你的家庭、社交、情绪和未来志向后，才能为你生成报告。")
+    else:
+        st.success("🎉 太棒了！五大向度已全部评估完成。")
 
+    # 只有进度条满 100% (5个向度) 且 AI 确认后，按钮才可用
     if progress >= 1.0:
-        st.success("✨ 五大维度已完成！")
-        if st.button("✅ 完成评估并退出", use_container_width=True):
+        if st.button("✅ 点击生成完整心灵报告并退出", use_container_width=True):
+            # 这里可以调用一个专门的总结函数，把对话发给 AI 总结出 5 个维度的分数或文字
+            # 然后再清空状态退出
             for key in list(st.session_state.keys()):
                 if key != "student_id": del st.session_state[key]
             st.rerun()
+    else:
+        # 进度没满时，按钮是灰色不可点的
+        st.button("评估进行中，暂不可退出", disabled=True)
 
 # 显示对话
 for msg in st.session_state.messages:
