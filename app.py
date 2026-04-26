@@ -46,7 +46,7 @@ if "current_mode" not in st.session_state:
     st.divider() # 画一条分割线
     col_l, col_m, col_r = st.columns([1, 2, 1]) # 居中排列
     with col_m:
-        if st.button("🚪 退出账号 / 换人登录", use_container_width=True):
+        if st.button("退出账号", use_container_width=True):
             # 清除所有 session 数据，回到登录页
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
