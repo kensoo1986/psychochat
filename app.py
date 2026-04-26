@@ -25,7 +25,7 @@ if "student_id" not in st.session_state:
                 st.error("学号或密码错误")
     st.stop()
 
-# --- 3. 模式选择界面 (更新版：加入退出功能) ---
+# --- 3. 模式选择界面 ---
 if "current_mode" not in st.session_state:
     st.title(f"你好，{st.session_state.student_id}")
     st.subheader("请选择你今天想进行的活动：")
@@ -42,24 +42,18 @@ if "current_mode" not in st.session_state:
     
     st.info("💡 提示：'生命向导'侧重于了解你的兴趣与成长；'心情检测'侧重于近期的情绪评估。")
 
-    # --- 新增退出按钮 ---
-    st.divider() # 画一条分割线
-    col_l, col_m, col_r = st.columns([1, 2, 1]) # 居中排列
+    st.divider() 
+    col_l, col_m, col_r = st.columns([1, 2, 1])
     with col_m:
         if st.button("退出账号", use_container_width=True):
-            # 清除所有 session 数据，回到登录页
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
             st.rerun()
     st.stop()
 
-# --- 4. 初始化对话 (修复变量未定义报错) ---
+# --- 4. 初始化对话 (修复语法重叠问题) ---
 if "messages" not in st.session_state:
-    # 定义共情指令
     if st.session_state.current_mode == "Navigator":
-        sys_prompt = """你是一位心理辅导老师。你的灵魂核心是“共情”和“接住”。
-        [沟通准则]：
-if st.session_state.current_mode == "Navigator":
         sys_prompt = """你是一位滨华中学的心理辅导老师。你的任务是通过对话完成学生的“五维生命画像”。
         
         [五个核心向度]：
@@ -88,8 +82,7 @@ if st.session_state.current_mode == "Navigator":
 # --- 5. 聊天界面与侧边栏 ---
 with st.sidebar:
     st.write(f"当前模式：{st.session_state.current_mode}")
-    if st.button("切换模式 / 退出"):
-        # 彻底清空除学号外的状态
+    if st.button("切换模式"):
         for key in list(st.session_state.keys()):
             if key != "student_id": del st.session_state[key]
         st.rerun()
@@ -105,7 +98,6 @@ if prompt := st.chat_input("在这里说说你的心事..."):
         st.write(prompt)
 
     with st.chat_message("assistant"):
-        # 这里的 messages 列表包含了整个对话链，从而实现 Context Chain（记忆）
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=st.session_state.messages
@@ -114,7 +106,6 @@ if prompt := st.chat_input("在这里说说你的心事..."):
         st.write(ai_msg)
         st.session_state.messages.append({"role": "assistant", "content": ai_msg})
         
-        # 存入数据库
         supabase.table("chat_logs").insert({
             "student_id": st.session_state.student_id,
             "user_input": prompt,
