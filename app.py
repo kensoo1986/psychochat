@@ -81,20 +81,33 @@ if "messages" not in st.session_state:
         {"role": "assistant", "content": init_text}
     ]
 
-# --- 5. 聊天界面与侧边栏 (进度条与退出控制) ---
+# --- 5. 聊天界面与侧边栏 (加入温馨提示) ---
 with st.sidebar:
     st.title("💎 探索中心")
     st.write(f"当前模式：{'心灵之友' if st.session_state.current_mode == 'Navigator' else '心情检测'}")
     
-    # 进度条逻辑 (设定 6 轮对话为完成)
+    st.divider()
+
+    # --- 新增：给学生的引导提示 ---
+    st.markdown("### 💡 温馨提示")
+    st.info("""
+    请尽量与 AI 深入对话。当进度达到 **100%** 时，下方会出现 **“完成评估”** 按键。
+    
+    点击后，辅导处将根据你的对话生成一份**完整的自我心灵图鉴**。
+    """)
+    st.divider()
+
+    # 进度条逻辑
     max_rounds = 6
     progress = min(st.session_state.chat_count / max_rounds, 1.0)
-    st.markdown(f"**探索进度：{int(progress * 100)}%**")
+    st.markdown(f"**目前探索进度：{int(progress * 100)}%**")
     st.progress(progress)
     
+    # 动态显示完成按钮
     if progress >= 1.0:
-        st.success("✨ 探索已完成！")
-        if st.button("✅ 完成评估并退出", use_container_width=True):
+        st.success("✨ 太棒了！探索已完成。")
+        if st.button("✅ 完成评估并查看报告", use_container_width=True):
+            # 这里是退出逻辑，后续我们可以接入跳转到报告页面的逻辑
             for key in list(st.session_state.keys()):
                 if key != "student_id": del st.session_state[key]
             st.rerun()
