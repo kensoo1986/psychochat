@@ -3,7 +3,7 @@ from openai import OpenAI
 from supabase import create_client, Client
 
 # --- 1. 基础配置 ---
-st.set_page_config(page_title="滨华生命向导", page_icon="🌱")
+st.set_page_config(page_title="心灵导航系统", page_icon="🌱")
 
 url: str = st.secrets["SUPABASE_URL"]
 key: str = st.secrets["SUPABASE_KEY"]
@@ -12,7 +12,7 @@ client = OpenAI(api_key=st.secrets["DEEPSEEK_API_KEY"], base_url="https://api.de
 
 # --- 2. 登录逻辑 ---
 if "student_id" not in st.session_state:
-    st.title("🌱 滨华中学：生命向导系统")
+    st.title("心灵导航系统")
     with st.form("login"):
         sid = st.text_input("学号").strip()
         pw = st.text_input("密码", type="password").strip()
@@ -32,15 +32,15 @@ if "current_mode" not in st.session_state:
     
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("🌱 生命向导 (探索自我)", use_container_width=True):
+        if st.button("🌱 心灵地图（建立自我概念）", use_container_width=True):
             st.session_state.current_mode = "Navigator"
             st.rerun()
     with col2:
-        if st.button("🔍 心情检测 (PY计划)", use_container_width=True):
+        if st.button("🔍 心情检测 ", use_container_width=True):
             st.session_state.current_mode = "PY"
             st.rerun()
     
-    st.info("💡 提示：'生命向导'侧重于了解你的兴趣与成长；'心情检测'侧重于近期的情绪评估。")
+    st.info("💡 提示：'心灵地图'侧重于了解你的成长故事；'心情检测'侧重于近期的情绪评估。")
 
     st.divider() 
     col_l, col_m, col_r = st.columns([1, 2, 1])
@@ -54,7 +54,7 @@ if "current_mode" not in st.session_state:
 # --- 4. 初始化对话 (修复语法重叠问题) ---
 if "messages" not in st.session_state:
     if st.session_state.current_mode == "Navigator":
-        sys_prompt = """你是一位滨华中学的心理辅导老师。你的任务是通过对话完成学生的“五维生命画像”。
+        sys_prompt = """你是一位心理辅导老师。你的任务是通过对话完成学生的“五维生命画像”。
         
         [五个核心向度]：
         1. 自我价值：关注其价值感是来自成绩还是内在认同。
@@ -69,10 +69,10 @@ if "messages" not in st.session_state:
         - 微信化短句：控制在 30 字左右，每次只问一个问题。
         - 保密例外：首句需简短提及。
         """
-        init_text = "你好呀！我是你的生命向导。🌱 我们的话是保密的（安全风险除外）。可以和我说下你最近怎样吗？"
+        init_text = "你好呀！我是你的 AI 心灵导师 🌱 我们的对话会被记录，并会严格保密（除非涉及你或他人的安全风险；在必要情况下，相关信息可能会转交辅导老师以提供协助）。 本对话主要协助你建立自我概念，欢迎你尽量与我分享与交流，以帮助形成更完整的自我认识。 如果你准备好了，可以回复「知道」开始我们的对话。"
     else:
         sys_prompt = "你是一位专业的心理辅导员，请通过精简对话评估 PHQ-9 指标。回复不超过 30 字。完成后加 [COMPLETE]。"
-        init_text = "你好，我是心情检测员。🌱 我们的话保密（安全风险除外）。最近两周，你觉得自己心情怎么样？"
+        init_text = "你好呀！我是你的 AI 心灵导师 🌱 我们的对话会被记录，并会严格保密（除非涉及你或他人的安全风险；在必要情况下，相关信息可能会转交辅导老师以提供协助）。最近两周，你觉得自己心情怎么样？"
 
     st.session_state.messages = [
         {"role": "system", "content": sys_prompt},
