@@ -67,7 +67,16 @@ if "messages" not in st.session_state:
 
 # --- 5. 侧边栏 ---
 with st.sidebar:
-    st.title("💎 探索中心")
+    st.title("💎 心灵探索之旅")
+    
+    st.markdown("""
+    ---
+    **亲爱的同学：**
+    这是一场属于你自己的深度探索。AI 并不是在“审判”你，而是像一面镜子，帮你照见那些平时没察觉到的内心角落。
+    
+    当你和 AI 聊得越深，这五大主题的灯火就会逐渐点亮。
+    ---
+    """)
     if st.session_state.current_mode == "Navigator":
         current_done = set(st.session_state.completed_dimensions)
         dim_count = len(current_done)
